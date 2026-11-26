@@ -82,6 +82,10 @@ class Util::Expression
 		@src[@pos..].starts_with?(str)
 	end
 
+	private def match_op(*ops : String) : String?
+		ops.find { |o| peek(o) }
+	end
+
 	private def peek_word(word : String) : Bool
 		return false if ! @src[@pos..].downcase.starts_with?(word)
 		nxt = @src[@pos + word.size]?
@@ -150,11 +154,7 @@ class Util::Expression
 		left = parse_relational
 		loop do
 			skip_ws
-			op = if peek("==") then "=="
-			elsif peek("!=") then "!="
-			elsif peek("<>") then "<>"
-			elsif peek("=") && ! peek("==") then "="
-			end
+			op = match_op("==", "!=", "<>", "=")
 			break if ! op
 			@pos += op.size
 			right = parse_relational
@@ -175,11 +175,7 @@ class Util::Expression
 		left = parse_concat
 		loop do
 			skip_ws
-			op = if peek("<=") then "<="
-			elsif peek(">=") then ">="
-			elsif peek("<") && ! peek("<>") then "<"
-			elsif peek(">") then ">"
-			end
+			op = peek("<>") ? nil : match_op("<=", ">=", "<", ">")
 			break if ! op
 			@pos += op.size
 			right = parse_concat
@@ -224,10 +220,7 @@ class Util::Expression
 		left = parse_unary
 		loop do
 			skip_ws
-			op = if peek("//") then "//"
-			elsif peek("*") && ! peek("**") then "*"
-			elsif peek("/") then "/"
-			end
+			op = peek("**") ? nil : match_op("//", "*", "/")
 			break if ! op
 			@pos += op.size
 			left = arith(op, left, parse_unary)
