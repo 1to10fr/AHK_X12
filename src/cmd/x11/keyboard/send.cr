@@ -90,3 +90,15 @@ class Cmd::X11::Keyboard::Send < Cmd::Base
 		end
 	end
 end
+# SendInput, Keys
+# Same as Send, plus support for the `{Raw}` prefix.
+class Cmd::X11::Keyboard::SendInput < Cmd::X11::Keyboard::Send
+	def run(thread, args)
+		if args[0].downcase.starts_with?("{raw}")
+			raw = args[0][5..]
+			Cmd::X11::Keyboard::SendRaw.new(line_no, [raw]).run(thread, [raw])
+		else
+			super
+		end
+	end
+end

@@ -1,0 +1,46 @@
+name: build
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: latest
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxinerama-dev libxkbcommon-dev libxtst-dev libgtk-3-dev libxi-dev libx11-dev libgirepository1.0-dev libatspi2.0-dev libssl-dev libnotify-dev libyaml-dev xvfb autoconf automake libtool
+      - name: Build
+        run: make bin/ahk_x11.dev
+      - name: Smoke test (no display needed)
+        run: |
+          cat > /tmp/smoke.ahk <<'AHK'
+          x := StrLen("hello") + 2
+          Echo, %x%
+          if (x = 7 && InStr("abc", "c") = 3)
+              Echo, if-expr ok
+          i := 0
+          while (i < 3)
+              i++
+          Echo, while ok %i%
+          s := Trim("[ab]", "[]")
+          Echo, %s%
+          Hello(5)
+          Return
+          Hello(n)
+          {
+              global
+              Echo, in function %n%
+          }
+          AHK
+          DISPLAY= ./bin/ahk_x11.dev /tmp/smoke.ahk | grep -v debug || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ahk_x12-linux-x86_64
+          path: bin/ahk_x11.dev

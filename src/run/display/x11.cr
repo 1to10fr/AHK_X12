@@ -31,6 +31,11 @@ module X11::C
 	def self.ahk_key_name_to_keysym_custom
 		{
 			"enter" => XK_Return,
+			# punctuation keys written as themselves, e.g. `-::` or `[::`
+			"-" => XK_minus,
+			"=" => XK_equal,
+			"[" => XK_bracketleft,
+			"]" => XK_bracketright,
 			"esc" => XK_Escape,
 			"bs" => XK_BackSpace,
 			"del" => XK_Delete,
