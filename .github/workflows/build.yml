@@ -44,12 +44,14 @@ jobs:
         run: |
           sudo apt-get install -y xdotool
           # Test copy: hotkeys always active, preloaded sheet, log the keys that would be sent
+          tr -d '\r' < examples/auto_piano_original.ahk > /tmp/piano_lf.ahk
           sed -e 's/^Suspend, On$//' \
               -e 's/^Gui, Show$/Gui, Show\nGuiControl,, PianoMusic, abc[de]f g/' \
               -e 's/^\(\s*\)SendInput, {Raw}%Keys%/&\n\1FileAppend, %Keys%`n, \/tmp\/piano_out.txt/' \
-              examples/auto_piano_original.ahk > /tmp/piano_test.ahk
+              /tmp/piano_lf.ahk > /tmp/piano_test.ahk
           rm -f /tmp/piano_out.txt
           xvfb-run -a bash -c '
+            export XDG_SESSION_TYPE=x11
             ./bin/ahk_x11.dev /tmp/piano_test.ahk > /tmp/piano_log.txt 2>&1 &
             sleep 6
             for i in 1 2 3 4 5 6 7; do xdotool key minus; sleep 0.5; done
