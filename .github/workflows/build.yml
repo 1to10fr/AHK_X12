@@ -43,11 +43,12 @@ jobs:
       - name: Run the original auto_piano.ahk under a virtual display
         run: |
           sudo apt-get install -y xdotool
-          # Test copy: hotkeys always active, preloaded sheet, log the keys that would be sent
+          # Test copy: hotkeys always active, preloaded sheet, log the keys instead of typing them
+          # (typing would land in the script's own edit box here, as there is no game window)
           tr -d '\r' < examples/auto_piano_original.ahk > /tmp/piano_lf.ahk
           sed -e 's/^Suspend, On$//' \
               -e 's/^Gui, Show$/Gui, Show\nGuiControl,, PianoMusic, abc[de]f g/' \
-              -e 's/^\(\s*\)SendInput, {Raw}%Keys%/&\n\1FileAppend, %Keys%`n, \/tmp\/piano_out.txt/' \
+              -e 's/^\(\s*\)SendInput, {Raw}%Keys%/\1FileAppend, %Keys%`n, \/tmp\/piano_out.txt/' \
               /tmp/piano_lf.ahk > /tmp/piano_test.ahk
           rm -f /tmp/piano_out.txt
           xvfb-run -a bash -c '
