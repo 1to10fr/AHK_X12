@@ -336,7 +336,9 @@ module Build
 					brace_line : Int32? = m[3]? ? i : nil
 					if ! brace_line
 						j = i + 1
-						j += 1 while j < lines.size && stripped[j].empty?
+						while j < lines.size && stripped[j].empty?
+							j += 1
+						end
 						brace_line = j if stripped[j]? == "{"
 					end
 					if brace_line

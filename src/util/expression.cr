@@ -73,7 +73,9 @@ class Util::Expression
 	end
 
 	def skip_ws
-		@pos += 1 while @pos < @src.size && @src[@pos].whitespace?
+		while @pos < @src.size && @src[@pos].whitespace?
+			@pos += 1
+		end
 	end
 
 	private def peek(str : String) : Bool
@@ -309,12 +311,18 @@ class Util::Expression
 			start = @pos
 			if c == '0' && (@src[@pos + 1]? == 'x' || @src[@pos + 1]? == 'X')
 				@pos += 2
-				@pos += 1 while @pos < @src.size && @src[@pos].hex?
+				while @pos < @src.size && @src[@pos].hex?
+					@pos += 1
+				end
 			else
-				@pos += 1 while @pos < @src.size && (@src[@pos].ascii_number? || @src[@pos] == '.')
+				while @pos < @src.size && (@src[@pos].ascii_number? || @src[@pos] == '.')
+					@pos += 1
+				end
 				if (@src[@pos]? == 'e' || @src[@pos]? == 'E') && (@src[@pos + 1]?.try { |d| d.ascii_number? || d == '-' || d == '+' })
 					@pos += 2
-					@pos += 1 while @pos < @src.size && @src[@pos].ascii_number?
+					while @pos < @src.size && @src[@pos].ascii_number?
+						@pos += 1
+					end
 				end
 			end
 			lit = @src[start...@pos]
@@ -323,7 +331,9 @@ class Util::Expression
 			return Expression.fmt(n)
 		elsif c.letter? || c == '_'
 			start = @pos
-			@pos += 1 while @pos < @src.size && (@src[@pos].alphanumeric? || @src[@pos] == '_')
+			while @pos < @src.size && (@src[@pos].alphanumeric? || @src[@pos] == '_')
+				@pos += 1
+			end
 			name = @src[start...@pos]
 			if @src[@pos]? == '('
 				@pos += 1
