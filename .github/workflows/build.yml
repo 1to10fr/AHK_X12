@@ -2,6 +2,8 @@ name: build
 on:
   push:
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -67,3 +69,17 @@ jobs:
         with:
           name: ahk_x12-linux-x86_64
           path: bin/ahk_x11.dev
+      - name: Prepare release files
+        if: github.ref == 'refs/heads/v2-expressions'
+        run: cp bin/ahk_x11.dev ahk_x12
+      - name: Publish release
+        if: github.ref == 'refs/heads/v2-expressions'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: x12-latest
+          name: AHK_X12 (latest build)
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          files: |
+            ahk_x12
+            examples/auto_piano_original.ahk
