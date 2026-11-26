@@ -411,7 +411,7 @@ class Util::Expression
 			st += s.size if st <= 0
 			st = 1_i64 if st < 1
 			return "" if st > s.size
-			avail = s.size - st + 1
+			avail = (s.size - st + 1).to_i64
 			l = avail
 			if have.call(2)
 				l = int.call(2, avail)
