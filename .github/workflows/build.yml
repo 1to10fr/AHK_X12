@@ -39,7 +39,27 @@ jobs:
               Echo, in function %n%
           }
           AHK
-          DISPLAY= ./bin/ahk_x11.dev /tmp/smoke.ahk | grep -v debug || true
+          DISPLAY= ./bin/ahk_x11.dev /tmp/smoke.ahk 2>&1 | grep -v '^\[debug\]' || true
+      - name: Run the original auto_piano.ahk under a virtual display
+        run: |
+          sudo apt-get install -y xdotool
+          # Test copy: hotkeys always active, preloaded sheet, log the keys that would be sent
+          sed -e 's/^Suspend, On$//' \
+              -e 's/^Gui, Show$/Gui, Show\nGuiControl,, PianoMusic, abc[de]f g/' \
+              -e 's/^\(\s*\)SendInput, {Raw}%Keys%/&\n\1FileAppend, %Keys%`n, \/tmp\/piano_out.txt/' \
+              examples/auto_piano_original.ahk > /tmp/piano_test.ahk
+          rm -f /tmp/piano_out.txt
+          xvfb-run -a bash -c '
+            ./bin/ahk_x11.dev /tmp/piano_test.ahk > /tmp/piano_log.txt 2>&1 &
+            sleep 6
+            for i in 1 2 3 4 5 6 7; do xdotool key minus; sleep 0.5; done
+            xdotool key bracketleft; sleep 0.5; xdotool key equal; sleep 0.5
+            kill %1
+          ' || true
+          echo "--- output log (without debug lines) ---"
+          grep -v '^\[debug\]' /tmp/piano_log.txt | tail -20 || true
+          echo "--- keys the script would have sent (expected: a b c de f g a) ---"
+          cat /tmp/piano_out.txt || echo "(nothing sent)"
       - uses: actions/upload-artifact@v4
         with:
           name: ahk_x12-linux-x86_64
