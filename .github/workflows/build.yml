@@ -11,7 +11,7 @@ jobs:
           submodules: recursive
       - uses: crystal-lang/install-crystal@v1
         with:
-          crystal: latest
+          crystal: 1.16.3
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -39,7 +39,7 @@ jobs:
               Echo, in function %n%
           }
           AHK
-          DISPLAY= ./bin/ahk_x11.dev /tmp/smoke.ahk 2>&1 | grep -v '^\[debug\]' || true
+          DISPLAY= ./bin/ahk_x11.dev /tmp/smoke.ahk 2>&1 | grep -v '^\[debug\]'; echo "exit=${PIPESTATUS[0]}"
       - name: Run the original auto_piano.ahk under a virtual display
         run: |
           sudo apt-get install -y xdotool
