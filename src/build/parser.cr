@@ -1,3 +1,4 @@
+require "./func-info"
 require "../cmd/**"
 require "../run/display/hotstring"
 
@@ -24,12 +25,27 @@ module Build
 		@hotstring_default_options = ""
 		@already_included = [] of Path
 		@user_defined_command_label_by_name = {} of String => String
+		# user-defined functions: lowercase name => parameters (name, default expression)
+		getter functions = {} of String => Build::FuncInfo
+		@function_def_lines = {} of Int32 => String
+		@function_skip_lines = Set(Int32).new
+		@function_end_lines = Set(Int32).new
+		FUNCTION_KEYWORDS = %w(if while loop for else switch catch until return and or not)
 
 		def parse_into_cmds!(lines : Indexable(String))
 			@cmds.clear
+			scan_functions lines
 			lines.each_with_index do |line, line_no|
 				begin
-					add_line line, line_no
+					if (func_name = @function_def_lines[line_no]?)
+						# a function ends the auto-execute section, and its body is a label
+						@cmds << Cmd::ControlFlow::Return.new line_no, [] of String
+						@cmds << Cmd::ControlFlow::Label.new line_no, ["__func_#{func_name}"]
+					elsif @function_end_lines.includes?(line_no)
+						@cmds << Cmd::ControlFlow::Return.new line_no, [] of String
+					elsif ! @function_skip_lines.includes?(line_no)
+						add_line line, line_no
+					end
 				rescue e
 					{% if ! flag?(:release) %}
 						e.inspect_with_backtrace(STDERR)
@@ -56,6 +72,19 @@ module Build
 			csv_args = [] of String
 
 			return if first_word.empty?
+			# `return expression`
+			if ! @block_comment && (ret = line_content.match(/\Areturn[\s,]+(.+)\z/i))
+				@cmds << Cmd::ControlFlow::ReturnExpr.new line_no, [ret[1].strip]
+				return
+			end
+			# `if (expression)` and `while (expression)`
+			if ! @block_comment && (if_while = line_content.match(/\A(if|while)\s*(\(.*)\z/i))
+				cond, rest = split_paren_condition(if_while[2])
+				expr_cmd_class = if_while[1].downcase == "if" ? Cmd::ControlFlow::IfExpr : Cmd::ControlFlow::While
+				@cmds << expr_cmd_class.new line_no, [cond]
+				add_line rest, line_no if ! rest.empty?
+				return
+			end
 			# Almost everything starts with a regular command, but there are
 			# a few exceptions: if, assignments.
 			cmd_class = @@cmd_class_by_name[first_word]?
@@ -79,6 +108,10 @@ module Build
 				else
 					@cmds << cmd_class.new line_no, csv_args
 				end
+			elsif (call = line_content.match(/\A([A-Za-z_]\w*)\s*\((.*)\)\z/)) && (func_params = @functions[call[1].downcase]?)
+				# call of a user-defined function as a statement: evaluate the arguments first,
+				# then assign them to the parameters, then jump to the function body.
+				@cmds << Cmd::Math::ExprAssign.new line_no, ["__ret", line_content]
 			elsif first_word == "#persistent"
 				@runner_settings.persistent = true
 			elsif first_word == "#singleinstance"
@@ -218,6 +251,22 @@ module Build
 				split_args(args).each_with_index do |arg, i|
 					add_line "SetEnv, A_Param#{i+1}", line_no
 				end
+			elsif (assign = line_content.match(/\A([A-Za-z_]\w*)\s*(:=|\+=|-=|\*=|\/=)\s*(.*)\z/))
+				var, op, rhs = assign[1], assign[2], assign[3]
+				raise "Value missing for '#{op}'" if rhs.empty?
+				if op == ":="
+					@cmds << Cmd::Math::ExprAssign.new line_no, [var, rhs]
+				elsif rhs.includes?("(") # function call: needs the expression evaluator
+					@cmds << Cmd::Math::ExprAssign.new line_no, [var, "#{var} #{op[0]} (#{rhs})"]
+				else
+					assign_class = case op
+					when "+=" then Cmd::Math::EnvAdd
+					when "-=" then Cmd::Math::EnvSub
+					when "*=" then Cmd::Math::EnvMult
+					else Cmd::Math::EnvDiv
+					end
+					@cmds << assign_class.new line_no, [var, rhs]
+				end
 			elsif first_word.ends_with?(':')
 				@cmds << Cmd::ControlFlow::Label.new line_no, [first_word[...-1]]
 			elsif first_word.ends_with?("++")
@@ -254,6 +303,154 @@ module Build
 				end
 				@cmds << cmd_class.new line_no, csv_args
 			end
+		end
+
+		# Finds all `name(params) {` function definitions in the file, and notes down which lines
+		# belong to them. Needs to run before parsing so that calls can precede definitions.
+		private def scan_functions(lines : Indexable(String))
+			@functions.clear
+			@function_def_lines.clear
+			@function_skip_lines.clear
+			@function_end_lines.clear
+			stripped = lines.map { |l| l.sub(/(^| |\t)#{@comment_flag}.*$/, "").strip }
+			block_comment = false
+			i = 0
+			while i < lines.size
+				content = stripped[i]
+				if block_comment
+					block_comment = false if content.starts_with?("*/")
+					i += 1
+					next
+				end
+				if content.starts_with?("/*")
+					block_comment = true
+					i += 1
+					next
+				end
+				m = content.match(/\A([A-Za-z_]\w*)\s*\(([^()]*)\)\s*(\{)?\z/)
+				if m && ! FUNCTION_KEYWORDS.includes?(m[1].downcase) && ! @@cmd_class_by_name[m[1].downcase]?
+					brace_line : Int32? = m[3]? ? i : nil
+					if ! brace_line
+						j = i + 1
+						while j < lines.size && stripped[j].empty?
+							j += 1
+						end
+						brace_line = j if stripped[j]? == "{"
+					end
+					if brace_line
+						params = [] of Build::FuncParam
+						m[2].split(',').each do |raw|
+							raw = raw.strip
+							byref = !! raw.match(/\Abyref\s+/i)
+							raw = raw.sub(/\Abyref\s+/i, "").sub(/\A&/, "").strip
+							next if raw.empty?
+							if (idx = raw.index(":=") || raw.index('='))
+								params << Build::FuncParam.new raw[0...idx].strip, raw[idx..].lstrip(":=").strip, byref
+							else
+								params << Build::FuncParam.new raw, nil, byref
+							end
+						end
+						depth = 0
+						end_line : Int32? = nil
+						k = brace_line
+						while k < lines.size
+							c = stripped[k]
+							depth -= 1 if c.starts_with?('}')
+							depth += 1 if c.ends_with?('{')
+							if depth == 0
+								end_line = k
+								break
+							end
+							k += 1
+						end
+						raise SyntaxException.new "Missing closing brace for function '#{m[1]}' (line #{i+1})" if ! end_line
+						name = m[1].downcase
+						# Which variables are local? Parameters, explicitly declared ones, and everything that is
+						# assigned to in the body (unless declared `global`). A bare `global` switches to "assume global".
+						locals = params.map(&.name.downcase)
+						globals = [] of String
+						assume_global = false
+						(brace_line + 1...end_line).each do |bi|
+							bl = stripped[bi]
+							if (am = bl.match(/\A([A-Za-z_]\w*)\s*(:=|\+=|-=|\*=|\/=|\/\/=|\.=|\+\+|--)/))
+								locals << am[1].downcase
+							elsif (dm = bl.match(/\A(global|local|static)\b[\s,]*(.*)\z/i))
+								names = dm[2].split(',').map { |n| n.strip.sub(/\s*:?=.*\z/, "").downcase }.reject(&.empty?)
+								if dm[1].downcase == "global"
+									names.empty? ? (assume_global = true) : globals.concat(names)
+								else
+									locals.concat names
+								end
+							end
+						end
+						locals = locals.uniq
+						locals = params.map(&.name.downcase) + locals.select { |l| bodydeclared_local?(stripped, brace_line, end_line, l) } if assume_global
+						locals -= (globals - params.map(&.name.downcase))
+						@functions[name] = Build::FuncInfo.new params, locals.uniq
+						@function_def_lines[i] = name
+						@function_skip_lines << brace_line if brace_line != i
+						@function_end_lines << end_line
+						i = end_line + 1
+						next
+					end
+				end
+				i += 1
+			end
+		end
+
+		# for assume-global functions: only names explicitly declared `local` stay local
+		private def bodydeclared_local?(stripped, from, to, name)
+			(from + 1...to).any? do |i|
+				m = stripped[i].match(/\Alocal\b[\s,]*(.*)\z/i)
+				m && m[1].split(',').any? { |n| n.strip.sub(/\s*:?=.*\z/, "").downcase == name }
+			end
+		end
+
+		# "(cond) rest" => {"cond", "rest"}
+		private def split_paren_condition(args : String)
+			depth = 0
+			in_str = false
+			args.each_char_with_index do |c, i|
+				if c == '"'
+					in_str = ! in_str
+				elsif ! in_str
+					if c == '('
+						depth += 1
+					elsif c == ')'
+						depth -= 1
+						return {args[1...i].strip, args[i+1..].strip} if depth == 0
+					end
+				end
+			end
+			raise "Unbalanced parentheses in condition"
+		end
+
+		# `a, f(b, c), "x,y"` => `a`, `f(b, c)`, `"x,y"`
+		private def split_call_args(str : String) : Array(String)
+			args = [] of String
+			depth = 0
+			in_str = false
+			current = String::Builder.new
+			str.each_char do |c|
+				if c == '"'
+					in_str = ! in_str
+					current << c
+				elsif ! in_str && c == '('
+					depth += 1
+					current << c
+				elsif ! in_str && c == ')'
+					depth -= 1
+					current << c
+				elsif ! in_str && depth == 0 && c == ','
+					args << current.to_s.strip
+					current = String::Builder.new
+				else
+					current << c
+				end
+			end
+			last = current.to_s.strip
+			args << last if ! last.empty? || ! args.empty?
+			args
 		end
 
 		def split_args(args, limit = nil)

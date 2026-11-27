@@ -66,6 +66,7 @@ module Run
 		}
 		@initial_working_dir = Dir.current
 		protected getter labels : Hash(String, Cmd::Base)
+		getter functions : Hash(String, Build::FuncInfo)
 		@threads = [] of Thread
 		@auto_execute_thread : Thread?
 		@run_thread_channel = Channel(Nil).new
@@ -89,6 +90,7 @@ module Run
 
 		def initialize(*, @builder, @script_file, @is_compiled, @headless, @repl)
 			@labels = @builder.labels
+			@functions = @builder.functions
 			@settings = @builder.runner_settings
 			script = @script_file ? @script_file.not_nil! : Path[binary_path].expand
 			set_global_built_in_static_var "A_ScriptDir", script.dirname

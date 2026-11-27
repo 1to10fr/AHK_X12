@@ -136,8 +136,13 @@ module Run
 				{% end %}
 
 				parsed_args = cmd.args.map do |arg|
-					Util::AhkString.parse_string(arg, @runner.settings.escape_char) do |var_name_lookup|
-						get_var(var_name_lookup)
+					if arg.starts_with?("% ") && ! cmd.is_a?(Cmd::Math::ExprAssign) && ! cmd.is_a?(Cmd::ControlFlow::IfExpr) && ! cmd.is_a?(Cmd::ControlFlow::While) && ! cmd.is_a?(Cmd::ControlFlow::ReturnExpr)
+						# v1.1 "force expression" parameter: `Echo, % a + b`
+						Util::Expression.eval(arg[2..], self)
+					else
+						Util::AhkString.parse_string(arg, @runner.settings.escape_char) do |var_name_lookup|
+							get_var(var_name_lookup)
+						end
 					end
 				end
 				{% if ! flag?(:release) %}
@@ -190,6 +195,54 @@ module Run
 				end
 			end
 			nil
+		end
+
+		# Return value of the most recently finished user-defined function call, see `ReturnExpr`
+		property return_value = ""
+
+		# Runs a user-defined function synchronously (used from within expressions) and returns its return value.
+		# Locals are saved before and restored after, so recursion and re-entrance work.
+		def call_function(name : String, args : Array(String), arg_var_names : Array(String?)) : String
+			key = name.downcase
+			info = @runner.functions[key]? || raise RuntimeException.new "Function '#{name}' not found"
+			entry = @runner.labels["__func_#{key}"]? || raise RuntimeException.new "Function '#{name}' has no body"
+			raise RuntimeException.new "Function '#{name}' takes at most #{info.params.size} parameters, but #{args.size} were given" if args.size > info.params.size
+			saved = info.locals.map { |l| {l, @runner.get_user_var(l)} }
+			saved_return = @return_value
+			info.params.each_with_index do |param, i|
+				value = args[i]?
+				if value.nil? || (value.empty? && param.default)
+					value = (d = param.default) ? Util::Expression.eval(d, self) : ""
+				end
+				@runner.set_user_var param.name, value
+			end
+			@return_value = ""
+			base = @stack.size
+			loops_base = @loop_stack.size
+			@stack << entry
+			@label_stack << "__func_#{key}"
+			begin
+				while @stack.size > base
+					exit_code = do_next
+					raise RuntimeException.new "Function '#{name}' aborted" if exit_code
+				end
+			ensure
+				while @loop_stack.size > loops_base
+					@loop_stack.pop
+				end
+			end
+			result = @return_value
+			byref_values = info.params.map { |p| p.byref ? @runner.get_user_var_str(p.name) : nil }
+			saved.each do |l, old|
+				old ? @runner.set_user_var(l, ::String.new(old)) : @runner.set_user_var(l, "")
+			end
+			info.params.each_with_index do |param, i|
+				if (v = byref_values[i]) && (target = arg_var_names[i]?)
+					@runner.set_user_var target, v
+				end
+			end
+			@return_value = saved_return
+			result
 		end
 
 		def gosub(label)

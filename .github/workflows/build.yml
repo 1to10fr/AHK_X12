@@ -1,0 +1,90 @@
+name: build
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.16.3
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxinerama-dev libxkbcommon-dev libxtst-dev libgtk-3-dev libxi-dev libx11-dev libgirepository1.0-dev libatspi2.0-dev libssl-dev libnotify-dev libyaml-dev xvfb autoconf automake libtool
+      - name: Build
+        run: make bin/ahk_x11.dev
+      - name: Smoke test (no display needed)
+        run: |
+          cat > /tmp/smoke.ahk <<'AHK'
+          x := StrLen("hello") + 2
+          Echo, %x%
+          if (x = 7 && InStr("abc", "c") = 3)
+              Echo, if-expr ok
+          i := 0
+          while (i < 3)
+              i++
+          Echo, while ok %i%
+          s := Trim("[ab]", "[]")
+          Echo, %s%
+          Hello(5)
+          Return
+          Hello(n)
+          {
+              global
+              Echo, in function %n%
+          }
+          AHK
+          DISPLAY= ./bin/ahk_x11.dev /tmp/smoke.ahk 2>&1 | grep -v '^\[debug\]'; echo "exit=${PIPESTATUS[0]}"
+      - name: Function tests (return values, recursion, ByRef, locals)
+        run: |
+          DISPLAY= XDG_SESSION_TYPE=x11 ./bin/ahk_x11.dev tests/functions.ahk 2>&1 | grep -v '^\[debug\]' | grep -v -e '^\["' -e '^WARNING' -e '^$' -e dbind -e 'Interactive AHK' -e '^ahk_x11>' > /tmp/functions.out || true
+          cat /tmp/functions.out
+          diff /tmp/functions.out tests/functions.expected && echo FUNCTION TESTS PASSED
+      - name: Run the original auto_piano.ahk under a virtual display
+        run: |
+          sudo apt-get install -y xdotool
+          # Test copy: hotkeys always active, preloaded sheet, log the keys instead of typing them
+          # (typing would land in the script's own edit box here, as there is no game window)
+          tr -d '\r' < examples/auto_piano_original.ahk > /tmp/piano_lf.ahk
+          sed -e 's/^Suspend, On$//' \
+              -e 's/^Gui, Show$/Gui, Show\nGuiControl,, PianoMusic, abc[de]f g/' \
+              -e 's/^\(\s*\)SendInput, {Raw}%Keys%/\1FileAppend, %Keys%`n, \/tmp\/piano_out.txt/' \
+              /tmp/piano_lf.ahk > /tmp/piano_test.ahk
+          rm -f /tmp/piano_out.txt
+          xvfb-run -a bash -c '
+            export XDG_SESSION_TYPE=x11
+            ./bin/ahk_x11.dev /tmp/piano_test.ahk > /tmp/piano_log.txt 2>&1 &
+            sleep 6
+            for i in 1 2 3 4 5 6 7; do xdotool key minus; sleep 0.5; done
+            xdotool key bracketleft; sleep 0.5; xdotool key equal; sleep 0.5
+            kill %1
+          ' || true
+          echo "--- output log (without debug lines) ---"
+          grep -v '^\[debug\]' /tmp/piano_log.txt | tail -20 || true
+          echo "--- keys the script would have sent (expected: a b c de f g a) ---"
+          cat /tmp/piano_out.txt || echo "(nothing sent)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ahk_x12-linux-x86_64
+          path: bin/ahk_x11.dev
+      - name: Prepare release files
+        if: github.ref == 'refs/heads/v2-expressions'
+        run: cp bin/ahk_x11.dev ahk_x12
+      - name: Publish release
+        if: github.ref == 'refs/heads/v2-expressions'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: x12-latest
+          name: AHK_X12 (latest build)
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          files: |
+            ahk_x12
+            examples/auto_piano_original.ahk
