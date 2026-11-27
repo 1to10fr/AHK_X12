@@ -68,6 +68,7 @@ module Run
 		protected getter labels : Hash(String, Cmd::Base)
 		getter functions : Hash(String, Build::FuncInfo)
 		@threads = [] of Thread
+		getter function_lock = Mutex.new(:reentrant)
 		@auto_execute_thread : Thread?
 		@run_thread_channel = Channel(Nil).new
 		@exit_code = 0

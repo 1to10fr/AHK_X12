@@ -202,7 +202,13 @@ module Run
 
 		# Runs a user-defined function synchronously (used from within expressions) and returns its return value.
 		# Locals are saved before and restored after, so recursion and re-entrance work.
+		# Only one thread may be inside a user function at a time (hotkey threads share all variables,
+		# so interleaved calls corrupt each other). Re-entrant, so recursion keeps working.
 		def call_function(name : String, args : Array(String), arg_var_names : Array(String?)) : String
+			@runner.function_lock.synchronize { call_function_locked(name, args, arg_var_names) }
+		end
+
+		private def call_function_locked(name : String, args : Array(String), arg_var_names : Array(String?)) : String
 			key = name.downcase
 			info = @runner.functions[key]? || raise RuntimeException.new "Function '#{name}' not found"
 			entry = @runner.labels["__func_#{key}"]? || raise RuntimeException.new "Function '#{name}' has no body"
