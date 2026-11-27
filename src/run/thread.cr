@@ -88,7 +88,7 @@ module Run
 		@result_channel : Channel(Int32?)?
 		@unpause_channel = Channel(Nil).new
 		getter paused = false
-		getter loop_stack = [] of Cmd::ControlFlow::Loop
+		property loop_stack = [] of Cmd::ControlFlow::Loop
 		property performance_by_cmd = {} of String => CmdPerformance
 		def initialize(@runner, start, label, @priority, @settings, @hotkey, @gui_id, @gui_control)
 			@@id_counter += 1
@@ -218,7 +218,8 @@ module Run
 			end
 			@return_value = ""
 			base = @stack.size
-			loops_base = @loop_stack.size
+			outer_loops = @loop_stack
+			@loop_stack = [] of Cmd::ControlFlow::Loop # loops inside the function start fresh (matters for recursion)
 			@stack << entry
 			@label_stack << "__func_#{key}"
 			begin
@@ -227,9 +228,7 @@ module Run
 					raise RuntimeException.new "Function '#{name}' aborted" if exit_code
 				end
 			ensure
-				while @loop_stack.size > loops_base
-					@loop_stack.pop
-				end
+				@loop_stack = outer_loops
 			end
 			result = @return_value
 			byref_values = info.params.map { |p| p.byref ? @runner.get_user_var_str(p.name) : nil }

@@ -77,6 +77,32 @@ module Build
 				@cmds << Cmd::ControlFlow::ReturnExpr.new line_no, [ret[1].strip]
 				return
 			end
+			# `for k, v in expr`
+			if ! @block_comment && (for_m = line_content.match(/\Afor\s+([A-Za-z_]\w*)\s*(?:,\s*([A-Za-z_]\w*))?\s+in\s+(.+)\z/i))
+				expr = for_m[3].strip
+				brace = false
+				if expr.ends_with?("{") && ! expr.ends_with?("{}")
+					brace = true
+					expr = expr[...-1].strip
+				end
+				vars = for_m[2]? ? "#{for_m[1]},#{for_m[2]}" : for_m[1]
+				@cmds << Cmd::ControlFlow::For.new line_no, [vars, expr]
+				add_line "{", line_no if brace
+				return
+			end
+			# `a[1] := x`, `obj.prop += 2`, and method call statements such as `list.Push(3)`
+			if ! @block_comment && line_content.match(/\A[A-Za-z_]\w*[.\[]/) && ! @@cmd_class_by_name[first_word]?
+				if (lv = split_lvalue(line_content))
+					lhs, rest = lv
+					if (am = rest.match(/\A\s*(:=|\+=|-=|\*=|\/=|\.=)\s*(.+)\z/))
+						@cmds << Cmd::Math::ObjAssign.new line_no, [lhs, am[1], am[2]]
+						return
+					elsif rest.empty? && lhs.ends_with?(")")
+						@cmds << Cmd::Math::ExprAssign.new line_no, ["__ret", lhs]
+						return
+					end
+				end
+			end
 			# `if (expression)` and `while (expression)`
 			if ! @block_comment && (if_while = line_content.match(/\A(if|while)\s*(\(.*)\z/i))
 				cond, rest = split_paren_condition(if_while[2])
@@ -251,12 +277,14 @@ module Build
 				split_args(args).each_with_index do |arg, i|
 					add_line "SetEnv, A_Param#{i+1}", line_no
 				end
-			elsif (assign = line_content.match(/\A([A-Za-z_]\w*)\s*(:=|\+=|-=|\*=|\/=)\s*(.*)\z/))
+			elsif (assign = line_content.match(/\A([A-Za-z_]\w*)\s*(:=|\+=|-=|\*=|\/=|\.=)\s*(.*)\z/))
 				var, op, rhs = assign[1], assign[2], assign[3]
 				raise "Value missing for '#{op}'" if rhs.empty?
 				if op == ":="
 					@cmds << Cmd::Math::ExprAssign.new line_no, [var, rhs]
-				elsif rhs.includes?("(") # function call: needs the expression evaluator
+				elsif op == ".="
+					@cmds << Cmd::Math::ExprAssign.new line_no, [var, "#{var} . (#{rhs})"]
+				elsif ! rhs.matches?(/\A[-+]?\d+(\.\d+)?\z/) # anything but a plain number: needs the expression evaluator
 					@cmds << Cmd::Math::ExprAssign.new line_no, [var, "#{var} #{op[0]} (#{rhs})"]
 				else
 					assign_class = case op
@@ -374,6 +402,9 @@ module Build
 							bl = stripped[bi]
 							if (am = bl.match(/\A([A-Za-z_]\w*)\s*(:=|\+=|-=|\*=|\/=|\/\/=|\.=|\+\+|--)/))
 								locals << am[1].downcase
+							elsif (fm = bl.match(/\Afor\s+([A-Za-z_]\w*)\s*(?:,\s*([A-Za-z_]\w*))?\s+in\b/i))
+								locals << fm[1].downcase
+								locals << fm[2].downcase if fm[2]?
 							elsif (dm = bl.match(/\A(global|local|static)\b[\s,]*(.*)\z/i))
 								names = dm[2].split(',').map { |n| n.strip.sub(/\s*:?=.*\z/, "").downcase }.reject(&.empty?)
 								if dm[1].downcase == "global"
@@ -396,6 +427,46 @@ module Build
 				end
 				i += 1
 			end
+		end
+
+		# Splits `a.b[c] := 1` into {"a.b[c]", " := 1"}. Needs at least one `.name`, `[index]` or `(args)` suffix.
+		private def split_lvalue(line : String) : {String, String}?
+			i = 0
+			return nil if ! (line[0]?.try { |c| c.letter? || c == '_' })
+			while i < line.size && (line[i].alphanumeric? || line[i] == '_')
+				i += 1
+			end
+			suffixes = 0
+			while i < line.size
+				c = line[i]
+				if c == '.' && (line[i + 1]?.try { |n| n.letter? || n == '_' } || false)
+					i += 1
+					while i < line.size && (line[i].alphanumeric? || line[i] == '_')
+						i += 1
+					end
+				elsif c == '[' || c == '('
+					close = c == '[' ? ']' : ')'
+					depth = 0
+					in_str = false
+					while i < line.size
+						d = line[i]
+						if d == '"'
+							in_str = ! in_str
+						elsif ! in_str
+							depth += 1 if d == c
+							depth -= 1 if d == close
+						end
+						i += 1
+						break if depth == 0
+					end
+					return nil if depth != 0
+				else
+					break
+				end
+				suffixes += 1
+			end
+			return nil if suffixes == 0
+			{line[0...i], line[i..]}
 		end
 
 		# for assume-global functions: only names explicitly declared `local` stay local
