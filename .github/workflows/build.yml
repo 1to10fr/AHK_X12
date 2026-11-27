@@ -86,6 +86,19 @@ jobs:
           grep -v '^\[debug\]' /tmp/piano_log.txt | tail -20 || true
           echo "--- keys the script would have sent (expected: a b c de f g a) ---"
           cat /tmp/piano_out.txt || echo "(nothing sent)"
+      - name: Stress test hotkeys with real key sending
+        run: |
+          tr -d '\r' < examples/auto_piano_original.ahk | sed -e 's/^Suspend, On$//' -e 's/^Gui, Show$/Gui, Show\nGuiControl,, PianoMusic, abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnop/' > /tmp/stress.ahk
+          xvfb-run -a bash -c '
+            export XDG_SESSION_TYPE=x11
+            ./bin/ahk_x11.dev /tmp/stress.ahk > /tmp/stress.log 2>&1 &
+            pid=$!
+            sleep 5
+            for i in $(seq 1 60); do xdotool key minus; sleep 0.15; if ! kill -0 $pid 2>/dev/null; then echo "DIED at press $i"; break; fi; done
+            kill -0 $pid 2>/dev/null && echo "STILL ALIVE after 60 presses"
+            kill $pid 2>/dev/null; true
+          ' || true
+          grep -v '^\[debug\]' /tmp/stress.log | tail -25
       - uses: actions/upload-artifact@v4
         with:
           name: ahk_x12-linux-x86_64
