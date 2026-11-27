@@ -1,10 +1,68 @@
-# AHK_X11
+# AHK_X12
 
-> **AHK_X12 (this fork):** adds expression support from newer AutoHotkey versions: `if (...)` / `while (...)` with
-> `&&`, `||`, `!`, comparisons and `. ` concat, `:=` and `+=` with expressions, `name(params) { ... }` functions
-> (callable inside expressions, with `return` values, local scope, default values, `ByRef` and recursion), `Echo, % expr` force-expression parameters, `global`, `SendInput {Raw}`, punctuation hotkeys like `[::`, and
-> built-in functions `StrLen SubStr InStr Trim LTrim RTrim StrReplace RegExMatch RegExReplace StrUpper StrLower Abs
-> Floor Ceil Int Round Mod Min Max Sqrt Chr Asc`. Not yet supported: objects, arrays, Map, classes, `for` loops. See `examples/auto_piano_original.ahk`.
+**AutoHotkey for Linux that speaks modern AutoHotkey.** A fork of [AHK_X11](https://github.com/phil294/AHK_X11) that
+adds the expression-based syntax of AHK v1.1 / v2 (real functions, `:=`, `if (...)`, `while (...)`, return values),
+so scripts written for current AutoHotkey run on Linux with far fewer changes.
+
+> **Why this fork exists:** AHK_X11 faithfully re-implements AutoHotkey **1.0.24** (2004), which has no functions,
+> no expressions and no return values. Almost every script written in the last 15 years uses them, so almost
+> every Windows script needs a rewrite first. AHK_X12 closes that gap step by step, while keeping everything
+> AHK_X11 already does (hotkeys, hotstrings, GUIs, window control, compiling to a single executable).
+
+## Quick start
+
+1. Download `ahk_x12` from the [latest build](https://github.com/1to10fr/AHK_X12/releases/tag/x12-latest).
+2. `chmod +x ahk_x12 && ./ahk_x12 your_script.ahk` (needs an **X11** session, not Wayland).
+
+A real-world script that runs unchanged: [`examples/auto_piano_original.ahk`](examples/auto_piano_original.ahk), a Roblox
+Virtual Piano autoplayer with a GUI, hotkeys, regex and chord parsing. It uses functions, `:=` and `SendInput {Raw}`,
+which AHK_X11 rejects.
+
+## What AHK_X12 adds
+
+| Feature | AHK_X11 | AHK_X12 |
+|---|:---:|:---:|
+| Expressions: `x := a + b * 2`, `+=`, `-=`, `*=`, `/=` | no | yes |
+| `if (expr)` and `while (expr)` with `&&` `\|\|` `!` `and` `or` `not`, ternary `a ? b : c` | no | yes |
+| `Echo, % expr` force-expression parameters | no | yes |
+| User functions `Name(a, b := 1) { ... }` called inside expressions | no | yes |
+| `return value`, local variables, `global` / `local`, `ByRef`, recursion | no | yes |
+| String / math built-ins: `StrLen SubStr InStr Trim StrReplace RegExMatch RegExReplace StrUpper StrLower Abs Floor Ceil Round Mod Min Max Sqrt Chr Asc ...` | no | yes |
+| `SendInput {Raw}` and punctuation hotkeys such as `[::` and `-::` | no | yes |
+| Hotkeys, hotstrings, GUIs, window commands, compile to executable | yes | yes |
+
+## Roadmap
+
+- [x] Expressions and operators
+- [x] Functions with return values, locals, `ByRef`, recursion
+- [ ] Arrays, `Map()`, objects and method calls
+- [ ] `for` loops, classes
+- [ ] v2-style syntax: `MsgBox("x")`, `{ }` blocks everywhere
+
+## How it is tested
+
+Every push is compiled by [GitHub Actions](.github/workflows/build.yml), which then runs the function test suite
+([`tests/functions.ahk`](tests/functions.ahk)) and the unmodified piano script under a virtual X server. The compiled
+binary is published as the `x12-latest` release.
+
+## Status and compatibility
+
+This is an early, actively developed fork. It is **not** full AutoHotkey v2 yet (see the roadmap), and values are still
+plain strings internally. Everything not listed above behaves like AHK_X11. For bugs in the new syntax, please open an
+issue in this repository, not upstream.
+
+## Credits and license
+
+AHK_X12 is built on [AHK_X11](https://github.com/phil294/AHK_X11) by [phil294](https://github.com/phil294), which does
+all the heavy lifting (X11 integration, GUI, hotkeys, compiler). All new code is released under the same license,
+**GPL-2.0**.
+
+---
+
+# Original AHK_X11 documentation
+
+The documentation below is upstream's. Links such as "Direct Download" point to the original AHK_X11 releases, and
+the statement that functions and expressions are unsupported does not apply to this fork (see above).
 
 AutoHotkey for Linux.
 
