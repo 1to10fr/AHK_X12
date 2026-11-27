@@ -82,7 +82,8 @@ module Run
 			# && ! @cmd_is_a?(Cmd::KeyHistory) && ! @cmd_is_a?(Cmd::ListLines) && ! @cmd_is_a?(Cmd::ListVars) && ! @cmd_is_a?(ListHotkeys)
 			if @threads.size >= @max_threads && ! @cmd.is_a?(Cmd::ControlFlow::ExitApp) && ! @cmd.is_a?(Cmd::Misc::Pause) && ! @cmd.is_a?(Cmd::Gtk::Edit) && ! @cmd.is_a?(Cmd::Misc::Reload)
 				# TODO: logger warn? what does win ahk do?
-				STDERR.puts "WARN: Skipping thread for hotkey press '#{key_str}' because #{@threads.size} threads are already running (max_threads==#{@max_threads}"
+				# (no per-press warning: spamming a key would flood stderr)
+				# STDERR.puts "WARN: Skipping thread for hotkey press '#{key_str}' because #{@threads.size} threads are already running (max_threads==#{@max_threads}"
 				return
 			end
 			thread = runner.not_nil!.add_thread @cmd.not_nil!, @key_str, @priority, hotkey: self

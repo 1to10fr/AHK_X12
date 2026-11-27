@@ -39,7 +39,15 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
 	zenity --error --title "AHK_X12" --text "$msg" 2>/dev/null || notify-send "AHK_X12" "$msg" 2>/dev/null || echo "$msg" >&2
 	exit 1
 fi
-exec "$HOME/.local/bin/ahk_x12" "$@"
+LOGDIR="$HOME/.cache/ahk_x12"; mkdir -p "$LOGDIR"; LOG="$LOGDIR/last.log"
+"$HOME/.local/bin/ahk_x12" "$@" >"$LOG" 2>&1
+code=$?
+if [ "$code" -ne 0 ]; then
+	{ echo "--- exit code $code ---"; dmesg 2>/dev/null | tail -3; } >>"$LOG" 2>&1
+	msg="AHK_X12 stopped unexpectedly (exit code $code). Details were saved to $LOG - please send that file."
+	zenity --error --title "AHK_X12" --text "$msg" 2>/dev/null || notify-send "AHK_X12" "$msg" 2>/dev/null
+fi
+exit "$code"
 LAUNCHER
 chmod +x "$BIN/ahk_x12-open"
 
