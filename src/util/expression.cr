@@ -291,7 +291,9 @@ class Util::Expression
 
 	private def read_ident : String
 		start = @pos
-		@pos += 1 while @pos < @src.size && (@src[@pos].alphanumeric? || @src[@pos] == '_')
+		while @pos < @src.size && (@src[@pos].alphanumeric? || @src[@pos] == '_')
+			@pos += 1
+		end
 		@src[start...@pos]
 	end
 

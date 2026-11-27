@@ -433,13 +433,17 @@ module Build
 		private def split_lvalue(line : String) : {String, String}?
 			i = 0
 			return nil if ! (line[0]?.try { |c| c.letter? || c == '_' })
-			i += 1 while i < line.size && (line[i].alphanumeric? || line[i] == '_')
+			while i < line.size && (line[i].alphanumeric? || line[i] == '_')
+				i += 1
+			end
 			suffixes = 0
 			while i < line.size
 				c = line[i]
 				if c == '.' && (line[i + 1]?.try { |n| n.letter? || n == '_' } || false)
 					i += 1
-					i += 1 while i < line.size && (line[i].alphanumeric? || line[i] == '_')
+					while i < line.size && (line[i].alphanumeric? || line[i] == '_')
+						i += 1
+					end
 				elsif c == '[' || c == '('
 					close = c == '[' ? ']' : ')'
 					depth = 0
