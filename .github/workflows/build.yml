@@ -80,10 +80,10 @@ jobs:
           name: ahk_x12-linux-x86_64
           path: bin/ahk_x11.dev
       - name: Prepare release files
-        if: github.ref == 'refs/heads/v2-expressions'
+        if: github.ref == 'refs/heads/master'
         run: cp bin/ahk_x11.dev ahk_x12
       - name: Publish release
-        if: github.ref == 'refs/heads/v2-expressions'
+        if: github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: x12-latest

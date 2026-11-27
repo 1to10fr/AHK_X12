@@ -28,6 +28,8 @@ which AHK_X11 rejects.
 | User functions `Name(a, b := 1) { ... }` called inside expressions | no | yes |
 | `return value`, local variables, `global` / `local`, `ByRef`, recursion | no | yes |
 | String / math built-ins: `StrLen SubStr InStr Trim StrReplace RegExMatch RegExReplace StrUpper StrLower Abs Floor Ceil Round Mod Min Max Sqrt Chr Asc ...` | no | yes |
+| Arrays `[1, 2]`, `Map()`, objects `{a: 1}` with `a[i]`, `o.prop`, `.Push() .Pop() .Has() .Get() ...`, `StrSplit` | no | yes |
+| `for k, v in obj` loops | no | yes |
 | `SendInput {Raw}` and punctuation hotkeys such as `[::` and `-::` | no | yes |
 | Hotkeys, hotstrings, GUIs, window commands, compile to executable | yes | yes |
 
@@ -35,14 +37,14 @@ which AHK_X11 rejects.
 
 - [x] Expressions and operators
 - [x] Functions with return values, locals, `ByRef`, recursion
-- [ ] Arrays, `Map()`, objects and method calls
-- [ ] `for` loops, classes
+- [x] Arrays, `Map()`, objects, method calls and `for` loops
+- [ ] Classes (`class`, `new`, methods, inheritance)
 - [ ] v2-style syntax: `MsgBox("x")`, `{ }` blocks everywhere
 
 ## How it is tested
 
 Every push is compiled by [GitHub Actions](.github/workflows/build.yml), which then runs the function test suite
-([`tests/functions.ahk`](tests/functions.ahk)) and the unmodified piano script under a virtual X server. The compiled
+([`tests/functions.ahk`](tests/functions.ahk), [`tests/objects.ahk`](tests/objects.ahk)) and the unmodified piano script under a virtual X server. The compiled
 binary is published as the `x12-latest` release.
 
 ## Status and compatibility
