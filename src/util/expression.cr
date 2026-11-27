@@ -511,7 +511,11 @@ class Util::Expression
 		when "chr" then int.call(0, 0_i64).to_i32.chr.to_s
 		when "asc" then (a.call(0)[0]?.try(&.ord) || 0).to_s
 		else
-			raise ExprError.new "Function '#{name}' not found. (Calling your own functions inside an expression is not supported yet: call them as a separate statement.)"
+			if thread.runner.functions.has_key?(name.downcase)
+				thread.call_function(name, args, names)
+			else
+				raise ExprError.new "Function '#{name}' not found"
+			end
 		end
 	end
 end

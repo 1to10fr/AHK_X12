@@ -42,6 +42,11 @@ jobs:
           }
           AHK
           DISPLAY= ./bin/ahk_x11.dev /tmp/smoke.ahk 2>&1 | grep -v '^\[debug\]'; echo "exit=${PIPESTATUS[0]}"
+      - name: Function tests (return values, recursion, ByRef, locals)
+        run: |
+          DISPLAY= XDG_SESSION_TYPE=x11 ./bin/ahk_x11.dev tests/functions.ahk 2>&1 | grep -v '^\[debug\]' | grep -v -e '^WARNING' -e '^$' -e dbind -e 'Interactive AHK' -e '^ahk_x11>' > /tmp/functions.out || true
+          cat /tmp/functions.out
+          diff /tmp/functions.out tests/functions.expected && echo FUNCTION TESTS PASSED
       - name: Run the original auto_piano.ahk under a virtual display
         run: |
           sudo apt-get install -y xdotool

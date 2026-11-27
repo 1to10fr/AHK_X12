@@ -1,3 +1,4 @@
+require "./func-info"
 require "../cmd/**"
 require "../run/display/hotstring"
 
@@ -25,7 +26,7 @@ module Build
 		@already_included = [] of Path
 		@user_defined_command_label_by_name = {} of String => String
 		# user-defined functions: lowercase name => parameters (name, default expression)
-		@functions = {} of String => Array({String, String?})
+		getter functions = {} of String => Build::FuncInfo
 		@function_def_lines = {} of Int32 => String
 		@function_skip_lines = Set(Int32).new
 		@function_end_lines = Set(Int32).new
@@ -71,6 +72,11 @@ module Build
 			csv_args = [] of String
 
 			return if first_word.empty?
+			# `return expression`
+			if ! @block_comment && (ret = line_content.match(/\Areturn[\s,]+(.+)\z/i))
+				@cmds << Cmd::ControlFlow::ReturnExpr.new line_no, [ret[1].strip]
+				return
+			end
 			# `if (expression)` and `while (expression)`
 			if ! @block_comment && (if_while = line_content.match(/\A(if|while)\s*(\(.*)\z/i))
 				cond, rest = split_paren_condition(if_while[2])
@@ -105,17 +111,7 @@ module Build
 			elsif (call = line_content.match(/\A([A-Za-z_]\w*)\s*\((.*)\)\z/)) && (func_params = @functions[call[1].downcase]?)
 				# call of a user-defined function as a statement: evaluate the arguments first,
 				# then assign them to the parameters, then jump to the function body.
-				call_args = split_call_args(call[2])
-				raise "Function '#{call[1]}' takes at most #{func_params.size} parameters, but #{call_args.size} were given" if call_args.size > func_params.size
-				func_params.each_with_index do |(_pname, default), i|
-					expr = call_args[i]?
-					expr = default if ! expr || expr.empty?
-					add_line "__arg#{i} := #{expr || "\"\""}", line_no
-				end
-				func_params.each_with_index do |(pname, _default), i|
-					add_line "#{pname} := __arg#{i}", line_no
-				end
-				add_line "GoSub, __func_#{call[1].downcase}", line_no
+				@cmds << Cmd::Math::ExprAssign.new line_no, ["__ret", line_content]
 			elsif first_word == "#persistent"
 				@runner_settings.persistent = true
 			elsif first_word == "#singleinstance"
@@ -342,14 +338,16 @@ module Build
 						brace_line = j if stripped[j]? == "{"
 					end
 					if brace_line
-						params = [] of {String, String?}
+						params = [] of Build::FuncParam
 						m[2].split(',').each do |raw|
-							raw = raw.strip.sub(/\Abyref\s+/i, "")
+							raw = raw.strip
+							byref = !! raw.match(/\Abyref\s+/i)
+							raw = raw.sub(/\Abyref\s+/i, "").sub(/\A&/, "").strip
 							next if raw.empty?
 							if (idx = raw.index(":=") || raw.index('='))
-								params << {raw[0...idx].strip, raw[idx..].lstrip(":=").strip}
+								params << Build::FuncParam.new raw[0...idx].strip, raw[idx..].lstrip(":=").strip, byref
 							else
-								params << {raw, nil}
+								params << Build::FuncParam.new raw, nil, byref
 							end
 						end
 						depth = 0
@@ -367,7 +365,28 @@ module Build
 						end
 						raise SyntaxException.new "Missing closing brace for function '#{m[1]}' (line #{i+1})" if ! end_line
 						name = m[1].downcase
-						@functions[name] = params
+						# Which variables are local? Parameters, explicitly declared ones, and everything that is
+						# assigned to in the body (unless declared `global`). A bare `global` switches to "assume global".
+						locals = params.map(&.name.downcase)
+						globals = [] of String
+						assume_global = false
+						(brace_line + 1...end_line).each do |bi|
+							bl = stripped[bi]
+							if (am = bl.match(/\A([A-Za-z_]\w*)\s*(:=|\+=|-=|\*=|\/=|\/\/=|\.=|\+\+|--)/))
+								locals << am[1].downcase
+							elsif (dm = bl.match(/\A(global|local|static)\b[\s,]*(.*)\z/i))
+								names = dm[2].split(',').map { |n| n.strip.sub(/\s*:?=.*\z/, "").downcase }.reject(&.empty?)
+								if dm[1].downcase == "global"
+									names.empty? ? (assume_global = true) : globals.concat(names)
+								else
+									locals.concat names
+								end
+							end
+						end
+						locals = locals.uniq
+						locals = params.map(&.name.downcase) + locals.select { |l| bodydeclared_local?(stripped, brace_line, end_line, l) } if assume_global
+						locals -= (globals - params.map(&.name.downcase))
+						@functions[name] = Build::FuncInfo.new params, locals.uniq
 						@function_def_lines[i] = name
 						@function_skip_lines << brace_line if brace_line != i
 						@function_end_lines << end_line
@@ -376,6 +395,14 @@ module Build
 					end
 				end
 				i += 1
+			end
+		end
+
+		# for assume-global functions: only names explicitly declared `local` stay local
+		private def bodydeclared_local?(stripped, from, to, name)
+			(from + 1...to).any? do |i|
+				m = stripped[i].match(/\Alocal\b[\s,]*(.*)\z/i)
+				m && m[1].split(',').any? { |n| n.strip.sub(/\s*:?=.*\z/, "").downcase == name }
 			end
 		end
 

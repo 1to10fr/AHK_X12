@@ -7,6 +7,7 @@ module Build
 		getter linker = Linker.new
 		getter start : Cmd::Base? = nil
 		getter labels = {} of String => Cmd::Base
+		getter functions : Hash(String, Build::FuncInfo) = {} of String => Build::FuncInfo
 		getter hotkeys = [] of Run::Hotkey
 		getter hotstrings = [] of Run::Hotstring
 		getter runner_settings = Run::RunnerSettings.new
@@ -14,6 +15,7 @@ module Build
 		def build(lines : Indexable(String))
 			@parser.parse_into_cmds! lines
 			@hotkeys = @parser.hotkeys
+			@functions = @parser.functions
 			@hotstrings = @parser.hotstrings
 			@runner_settings = @parser.runner_settings
 
