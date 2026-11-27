@@ -2,10 +2,9 @@
 
 > **AHK_X12 (this fork):** adds expression support from newer AutoHotkey versions: `if (...)` / `while (...)` with
 > `&&`, `||`, `!`, comparisons and `. ` concat, `:=` and `+=` with expressions, `name(params) { ... }` functions
-> (call them as a statement, e.g. `PlayNextNote()`), `global`, `SendInput {Raw}`, punctuation hotkeys like `[::`, and
+> (callable inside expressions, with `return` values, local scope, default values, `ByRef` and recursion), `Echo, % expr` force-expression parameters, `global`, `SendInput {Raw}`, punctuation hotkeys like `[::`, and
 > built-in functions `StrLen SubStr InStr Trim LTrim RTrim StrReplace RegExMatch RegExReplace StrUpper StrLower Abs
-> Floor Ceil Int Round Mod Min Max Sqrt Chr Asc`. Not yet supported: calling your own functions inside an expression,
-> function return values, objects, arrays, classes. See `examples/auto_piano_original.ahk`.
+> Floor Ceil Int Round Mod Min Max Sqrt Chr Asc`. Not yet supported: objects, arrays, Map, classes, `for` loops. See `examples/auto_piano_original.ahk`.
 
 AutoHotkey for Linux.
 
