@@ -5,10 +5,8 @@ require "../../util/expression"
 class Cmd::ControlFlow::While < Cmd::ControlFlow::Loop
 	def self.min_args; 1 end
 	def self.max_args; 1 end
-	@started = false
 	def run(thread, args)
-		if ! @started
-			@started = true
+		if thread.loop_stack.last? != self
 			thread.loop_stack << self
 		end
 		@index += 1
@@ -17,7 +15,6 @@ class Cmd::ControlFlow::While < Cmd::ControlFlow::Loop
 		cond
 	end
 	def finish(thread)
-		@started = false
 		@index = 0
 		thread.loop_stack.pop
 	end

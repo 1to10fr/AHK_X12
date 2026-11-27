@@ -1,3 +1,5 @@
+require "./object-store"
+
 # Evaluator for AutoHotkey v1.1/v2-style expressions, such as `StrLen(x) > 3 && !done`.
 # All values are strings, like everywhere else in this interpreter; numbers are
 # detected when an operator needs them.
@@ -287,11 +289,144 @@ class Util::Expression
 		end
 	end
 
+	private def read_ident : String
+		start = @pos
+		@pos += 1 while @pos < @src.size && (@src[@pos].alphanumeric? || @src[@pos] == '_')
+		@src[start...@pos]
+	end
+
+	private def member_follows? : Bool
+		c = @src[@pos]?
+		(c == '.' && (@src[@pos + 1]?.try { |n| n.letter? || n == '_' } || false)) || c == '['
+	end
+
+	# value plus any number of `.prop`, `.method(args)` and `[index]` suffixes (no whitespace allowed before them)
 	private def parse_primary : String
+		v = parse_atom
+		while member_follows?
+			v = apply_member(v)
+		end
+		v
+	end
+
+	private def apply_member(v : String) : String
+		if @src[@pos] == '['
+			@pos += 1
+			key = parse_ternary
+			skip_ws
+			raise ExprError.new "Missing ']' in expression '#{@src}'" if @src[@pos]? != ']'
+			@pos += 1
+			ObjectStore.index_get(v, key)
+		else
+			@pos += 1
+			name = read_ident
+			if @src[@pos]? == '('
+				@pos += 1
+				args, _names = parse_args(name)
+				ObjectStore.call_method(v, name, args)
+			else
+				ObjectStore.prop_get(v, name)
+			end
+		end
+	end
+
+	# For assignments like `a.b[1] := x`: returns the container and the final accessor, which isn't applied.
+	def parse_lvalue : {String, Bool, String}
+		v = parse_atom
+		loop do
+			raise ExprError.new "Not assignable: '#{@src}'" if ! member_follows?
+			if @src[@pos] == '['
+				@pos += 1
+				key = parse_ternary
+				skip_ws
+				raise ExprError.new "Missing ']' in expression '#{@src}'" if @src[@pos]? != ']'
+				@pos += 1
+				return {v, true, key} if at_end?
+				v = ObjectStore.index_get(v, key)
+			else
+				@pos += 1
+				name = read_ident
+				return {v, false, name} if at_end?
+				if @src[@pos]? == '('
+					@pos += 1
+					args, _names = parse_args(name)
+					v = ObjectStore.call_method(v, name, args)
+				else
+					v = ObjectStore.prop_get(v, name)
+				end
+			end
+		end
+	end
+
+	def compound(op : String, a : String, b : String) : String
+		case op
+		when ".=" then a + b
+		else arith(op[0].to_s, a, b)
+		end
+	end
+
+	# `target := value`, `target += value`, ... where target is `a[1]`, `o.name`, `a.b[c]`...
+	def self.assign(lhs : String, op : String, rhs_src : String, thread : Run::Thread)
+		ex = new(lhs, thread)
+		container, indexed, key = ex.parse_lvalue
+		rhs = eval(rhs_src, thread)
+		if op != ":="
+			cur = indexed ? ObjectStore.index_get(container, key) : ObjectStore.prop_get(container, key)
+			rhs = ex.compound(op, cur, rhs)
+		end
+		if indexed
+			ObjectStore.index_set(container, key, rhs)
+		else
+			ObjectStore.prop_set(container, key, rhs)
+		end
+	end
+
+	private def parse_atom : String
 		skip_ws
 		c = @src[@pos]?
 		raise ExprError.new "Unexpected end of expression '#{@src}'" if ! c
-		if c == '('
+		if c == '['
+			@pos += 1
+			items = [] of String
+			skip_ws
+			if @src[@pos]? == ']'
+				@pos += 1
+			else
+				loop do
+					items << parse_ternary
+					skip_ws
+					d = @src[@pos]?
+					@pos += 1
+					break if d == ']'
+					raise ExprError.new "Expected ',' or ']' in array literal in '#{@src}'" if d != ','
+				end
+			end
+			return ObjectStore.array_of(items)
+		elsif c == '{'
+			@pos += 1
+			h = ObjectStore.create(AhkObject::Kind::Object)
+			o = ObjectStore.lookup(h).not_nil!
+			skip_ws
+			if @src[@pos]? == '}'
+				@pos += 1
+			else
+				loop do
+					skip_ws
+					key = @src[@pos]? == '"' ? parse_string : read_ident
+					raise ExprError.new "Missing property name in object literal in '#{@src}'" if key.empty?
+					skip_ws
+					raise ExprError.new "Expected ':' after '#{key}' in object literal in '#{@src}'" if @src[@pos]? != ':'
+					@pos += 1
+					o.map[key.downcase] = parse_ternary
+					skip_ws
+					d = @src[@pos]?
+					@pos += 1
+					break if d == '}'
+					raise ExprError.new "Expected ',' or '}' in object literal in '#{@src}'" if d != ','
+				end
+			end
+			return h
+		elsif c == '('
 			@pos += 1
 			v = parse_ternary
 			skip_ws
@@ -364,6 +499,12 @@ class Util::Expression
 
 	# Parses the arguments of a function call (opening paren already consumed) and runs it.
 	private def call(name : String) : String
+		args, names = parse_args(name)
+		Expression.run_function(@thread, name, args, names)
+	end
+
+	# Parses call arguments up to and including the closing paren (the opening one is already consumed)
+	private def parse_args(name : String) : {Array(String), Array(String?)}
 		args = [] of String
 		names = [] of String? # set when an argument is a bare variable name (needed for output vars)
 		skip_ws
@@ -388,7 +529,7 @@ class Util::Expression
 				raise ExprError.new "Expected ',' or ')' in call to '#{name}' in '#{@src}'" if c != ','
 			end
 		end
-		Expression.run_function(@thread, name, args, names)
+		{args, names}
 	end
 
 	def self.run_function(thread : Run::Thread, name : String, args : Array(String), names : Array(String?)) : String
@@ -508,6 +649,27 @@ class Util::Expression
 			raise ExprError.new "#{name}() needs at least one parameter" if vals.empty?
 			pick = name.downcase == "min" ? vals.min_by(&.to_f) : vals.max_by(&.to_f)
 			fmt(pick)
+		when "array" then ObjectStore.array_of(args)
+		when "map"
+			raise ExprError.new "Map(): parameters must come in key/value pairs" if args.size.odd?
+			h = ObjectStore.create(AhkObject::Kind::Map)
+			o = ObjectStore.lookup(h).not_nil!
+			args.each_slice(2) { |pair| o.map[pair[0]] = pair[1] }
+			h
+		when "object"
+			raise ExprError.new "Object(): parameters must come in name/value pairs" if args.size.odd?
+			h = ObjectStore.create(AhkObject::Kind::Object)
+			o = ObjectStore.lookup(h).not_nil!
+			args.each_slice(2) { |pair| o.map[pair[0].downcase] = pair[1] }
+			h
+		when "isobject" then bool(ObjectStore.object?(a.call(0)))
+		when "strsplit"
+			str = a.call(0)
+			delim = a.call(1)
+			omit = a.call(2)
+			parts = delim.empty? ? str.chars.map(&.to_s) : str.split(delim, remove_empty: false)
+			parts = parts.map(&.strip(omit)) if ! omit.empty?
+			ObjectStore.array_of(parts)
 		when "chr" then int.call(0, 0_i64).to_i32.chr.to_s
 		when "asc" then (a.call(0)[0]?.try(&.ord) || 0).to_s
 		else
