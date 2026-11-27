@@ -222,7 +222,9 @@ module Run
 					raise RuntimeException.new "Function '#{name}' aborted" if exit_code
 				end
 			ensure
-				@loop_stack.pop while @loop_stack.size > loops_base
+				while @loop_stack.size > loops_base
+					@loop_stack.pop
+				end
 			end
 			result = @return_value
 			byref_values = info.params.map { |p| p.byref ? @runner.get_user_var_str(p.name) : nil }
