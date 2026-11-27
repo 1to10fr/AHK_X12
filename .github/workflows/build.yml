@@ -86,6 +86,12 @@ jobs:
           grep -v '^\[debug\]' /tmp/piano_log.txt | tail -20 || true
           echo "--- keys the script would have sent (expected: a b c de f g a) ---"
           cat /tmp/piano_out.txt || echo "(nothing sent)"
+      - name: Untouched original file must parse
+        run: |
+          cp examples/auto_piano_original.ahk /tmp/untouched.ahk
+          xvfb-run -a bash -c 'export XDG_SESSION_TYPE=x11; timeout 8 ./bin/ahk_x11.dev /tmp/untouched.ahk > /tmp/untouched.log 2>&1; true'
+          grep -v '^\[debug\]' /tmp/untouched.log | head -20
+          ! grep -qi "syntax error" /tmp/untouched.log && echo UNTOUCHED FILE OK
       - uses: actions/upload-artifact@v4
         with:
           name: ahk_x12-linux-x86_64
