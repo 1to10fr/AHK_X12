@@ -96,13 +96,13 @@ jobs:
             sleep 5
             for i in $(seq 1 60); do xdotool key minus; sleep 0.15; if ! kill -0 $pid 2>/dev/null; then echo "DIED at press $i"; break; fi; done
             kill -0 $pid 2>/dev/null && echo "STILL ALIVE after 60 presses"
-            for i in $(seq 1 150); do xdotool key minus; if ! kill -0 $pid 2>/dev/null; then echo "DIED in burst at $i"; break; fi; done
+            for i in $(seq 1 150); do xdotool key minus equal bracketleft bracketright; if ! kill -0 $pid 2>/dev/null; then echo "DIED in burst at $i"; break; fi; done
             sleep 3
             kill -0 $pid 2>/dev/null && echo "ALIVE after burst" || echo "DEAD after burst"
             xdotool key equal; sleep 1; kill -0 $pid 2>/dev/null && echo "ALIVE after final press"
             kill $pid 2>/dev/null; true
           ' || true
-          grep -v '^\[debug\]' /tmp/stress.log | tail -25
+          grep -v '^\[debug\]' /tmp/stress.log | tail -25; ! grep -q "Runtime error" /tmp/stress.log && echo NO RUNTIME ERRORS
       - uses: actions/upload-artifact@v4
         with:
           name: ahk_x12-linux-x86_64
