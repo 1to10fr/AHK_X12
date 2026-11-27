@@ -136,8 +136,13 @@ module Run
 				{% end %}
 
 				parsed_args = cmd.args.map do |arg|
-					Util::AhkString.parse_string(arg, @runner.settings.escape_char) do |var_name_lookup|
-						get_var(var_name_lookup)
+					if arg.starts_with?("% ") && ! cmd.is_a?(Cmd::Math::ExprAssign) && ! cmd.is_a?(Cmd::ControlFlow::IfExpr) && ! cmd.is_a?(Cmd::ControlFlow::While) && ! cmd.is_a?(Cmd::ControlFlow::ReturnExpr)
+						# v1.1 "force expression" parameter: `Echo, % a + b`
+						Util::Expression.eval(arg[2..], self)
+					else
+						Util::AhkString.parse_string(arg, @runner.settings.escape_char) do |var_name_lookup|
+							get_var(var_name_lookup)
+						end
 					end
 				end
 				{% if ! flag?(:release) %}
