@@ -11,8 +11,17 @@ so scripts written for current AutoHotkey run on Linux with far fewer changes.
 
 ## Quick start
 
-1. Download `ahk_x12` from the [latest build](https://github.com/1to10fr/AHK_X12/releases/tag/x12-latest).
-2. `chmod +x ahk_x12 && ./ahk_x12 your_script.ahk` (needs an **X11** session, not Wayland).
+**One-line install** (then double-click any `.ahk` file to run it):
+
+```
+curl -fsSL https://github.com/1to10fr/AHK_X12/releases/download/x12-latest/install.sh | sh
+```
+
+It installs to `~/.local/bin`, registers `.ahk` files, and shows a clear message if you are on Wayland. Remove it with
+`sh install.sh --uninstall`. Needs an **X11** session (not Wayland).
+
+Manual way: download `ahk_x12` from the [latest build](https://github.com/1to10fr/AHK_X12/releases/tag/x12-latest), then
+`chmod +x ahk_x12 && ./ahk_x12 your_script.ahk`.
 
 A real-world script that runs unchanged: [`examples/auto_piano_original.ahk`](examples/auto_piano_original.ahk), a Roblox
 Virtual Piano autoplayer with a GUI, hotkeys, regex and chord parsing. It uses functions, `:=` and `SendInput {Raw}`,

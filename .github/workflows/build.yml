@@ -52,6 +52,17 @@ jobs:
           DISPLAY= XDG_SESSION_TYPE=x11 ./bin/ahk_x11.dev tests/objects.ahk 2>&1 | grep -v '^\[debug\]' | grep -v -e '^\["' -e '^WARNING' -e '^$' -e dbind -e 'Interactive AHK' -e '^ahk_x11>' > /tmp/objects.out || true
           cat /tmp/objects.out
           diff /tmp/objects.out tests/objects.expected && echo OBJECT TESTS PASSED
+      - name: Installer test
+        run: |
+          export HOME=/tmp/fakehome; mkdir -p $HOME
+          AHK_X12_LOCAL=$PWD/bin/ahk_x11.dev sh install.sh
+          test -x $HOME/.local/bin/ahk_x12 && test -x $HOME/.local/bin/ahk_x12-open
+          grep -q "ahk_x12-open %f" $HOME/.local/share/applications/ahk_x12.desktop
+          echo "x := 1" > /tmp/t.ahk
+          xdg-mime query filetype /tmp/t.ahk || true
+          xdg-mime query default text/x-autohotkey || true
+          sh install.sh --uninstall
+          test ! -e $HOME/.local/bin/ahk_x12 && echo INSTALLER TESTS PASSED
       - name: Run the original auto_piano.ahk under a virtual display
         run: |
           sudo apt-get install -y xdotool
@@ -92,4 +103,5 @@ jobs:
           target_commitish: ${{ github.sha }}
           files: |
             ahk_x12
+            install.sh
             examples/auto_piano_original.ahk
