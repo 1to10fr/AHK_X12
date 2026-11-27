@@ -366,7 +366,13 @@ module Run
 				start = Time.monotonic
 				while Process.exists?(already_running_pid)
 					if Time.monotonic - start > 1.second
-						raise "Failed to kill previous instance process with PID #{already_running_pid}"
+						# the old instance is hung and ignores the polite request: kill it for real
+						begin
+							Process.signal(Signal::KILL, already_running_pid)
+						rescue
+						end
+						sleep 200.milliseconds
+						break
 					end
 					sleep 10.milliseconds
 				end
