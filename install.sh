@@ -39,6 +39,11 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
 	zenity --error --title "AHK_X12" --text "$msg" 2>/dev/null || notify-send "AHK_X12" "$msg" 2>/dev/null || echo "$msg" >&2
 	exit 1
 fi
+# Started from the app menu without a file: ask for one instead of opening the upstream installer
+if [ $# -eq 0 ]; then
+	f=$(zenity --file-selection --title "AHK_X12: choose an AutoHotkey script (.ahk)" 2>/dev/null) || exit 0
+	set -- "$f"
+fi
 # Kill any other running copy of this same script (they fight over the hotkeys and cause BadAccess errors)
 for pid in $(pgrep -x ahk_x12 2>/dev/null); do
 	[ "$pid" = "$$" ] && continue
@@ -46,7 +51,9 @@ for pid in $(pgrep -x ahk_x12 2>/dev/null); do
 done
 sleep 0.3
 LOGDIR="$HOME/.cache/ahk_x12"; mkdir -p "$LOGDIR"; LOG="$LOGDIR/last.log"
-"$HOME/.local/bin/ahk_x12" "$@" >"$LOG" 2>&1
+[ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 400 ] && tail -n 200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+echo "=== $(date) : $* ===" >>"$LOG"
+"$HOME/.local/bin/ahk_x12" "$@" >>"$LOG" 2>&1
 code=$?
 if [ "$code" -ne 0 ]; then
 	{ echo "--- exit code $code ---"; dmesg 2>/dev/null | tail -3; } >>"$LOG" 2>&1
