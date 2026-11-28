@@ -39,6 +39,12 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
 	zenity --error --title "AHK_X12" --text "$msg" 2>/dev/null || notify-send "AHK_X12" "$msg" 2>/dev/null || echo "$msg" >&2
 	exit 1
 fi
+# Kill any other running copy of this same script (they fight over the hotkeys and cause BadAccess errors)
+for pid in $(pgrep -x ahk_x12 2>/dev/null); do
+	[ "$pid" = "$$" ] && continue
+	if [ "$(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null | sed 's/ *$//' | sed 's/^[^ ]* //')" = "$*" ]; then kill -9 "$pid" 2>/dev/null; fi
+done
+sleep 0.3
 LOGDIR="$HOME/.cache/ahk_x12"; mkdir -p "$LOGDIR"; LOG="$LOGDIR/last.log"
 "$HOME/.local/bin/ahk_x12" "$@" >"$LOG" 2>&1
 code=$?
